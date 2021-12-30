@@ -1,0 +1,10 @@
+{
+  "host_file":"host.txt",
+  "relay_config_file":"relayTest.json",
+  "send_log_screen": 1,
+  "receive_log_screen":1,
+  "result_mode":"csv",
+  "result_file":"result.csv",
+  "redis_bloom_host":"mx2.pony.imapmax.xyz:6379",
+  "redis_bloom_keys":"urls"
+}
