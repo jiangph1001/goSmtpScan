@@ -2,3 +2,5 @@ test*
 *.txt
 log
 *.xml
+fdns*
+*.csv

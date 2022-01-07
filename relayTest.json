@@ -1,5 +1,6 @@
 {
-  "relay_domain":"imapmax.xyz",
-  "relay_user":"test",
-  "from_user":"guest"
+  "from_user": "guest",
+  "from_domain": "imapmax.xyz",
+  "to_user":"relay",
+  "to_domain": "imapmax.xyz"
 }

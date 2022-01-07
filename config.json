@@ -1,10 +1,21 @@
 {
   "host_file":"host.txt",
   "relay_config_file":"relayTest.json",
-  "send_log_screen": 1,
-  "receive_log_screen":1,
-  "result_mode":"csv",
-  "result_file":"result.csv",
+  "send_log_screen": 0,
+  "receive_log_screen":0,
+  "csv_mode":1,
+  "csv_file":"result.csv",
+  "mysql_mode":1,
+  "mysql_config":{
+    "username":"root",
+    "password":"123456",
+    "host":"192.168.11.194",
+    "port": 3306,
+    "database": "email",
+    "table": "smtp_result",
+    "column":"timestamp,mx_host,ip,port,smtp_host,smtp_server,case_num,success_cnt,skip_cnt,test_score"
+  },
+  "redis_bloom_mode":1,
   "redis_bloom_host":"mx2.pony.imapmax.xyz:6379",
   "redis_bloom_keys":"urls"
 }
