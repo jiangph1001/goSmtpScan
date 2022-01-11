@@ -14,7 +14,7 @@ var relayConfig RelayConfig
 // 0 测试通过
 // 1 测试不通过
 // -1 未执行测试
-func SingleTest(conn net.Conn,mailFrom string,rcptTo string) int {
+func SingleTest(conn net.Conn,mailFrom string,rcptTo string,smtpLogger *log.Logger) int {
 	var commandList []string
 	var responseList []string
 	mailFromCommand := fmt.Sprintf("MAIL FROM:<%s>\r\n", mailFrom)
@@ -25,7 +25,7 @@ func SingleTest(conn net.Conn,mailFrom string,rcptTo string) int {
 
 	// 统一发送请求
 	for _, command := range commandList {
-		response := SendCommand(conn, command)
+		response := SendCommand(conn, command,smtpLogger)
 		responseList = append(responseList,response)
 	}
 
@@ -48,12 +48,12 @@ func SingleTest(conn net.Conn,mailFrom string,rcptTo string) int {
 
 // SingleTestOptimize
 // 优化后的单个测试用例，合并发送，理论上能加快单个的测试速度，实际效果待更多的测试
-func SingleTestOptimize(conn net.Conn,mailFrom string,rcptTo string) int {
+func SingleTestOptimize(conn net.Conn,mailFrom string,rcptTo string,smtpLogger *log.Logger) int {
 	command := fmt.Sprintf("MAIL FROM:<%s>\r\nRCPT TO:<%s>\n", mailFrom,rcptTo)
 	//commandList = append(commandList, "RSET\r\n")
 
 	// 统一发送请求
-	response := SendCommand(conn, command)
+	response := SendCommand(conn, command,smtpLogger)
 	response2 := getResponse(conn)
 
 	responseList := []string{
@@ -75,8 +75,8 @@ func SingleTestOptimize(conn net.Conn,mailFrom string,rcptTo string) int {
 }
 
 //发送RSET指令，若该指令执行不通过，则后续不再执行
-func rsetSession(conn net.Conn) int {
-	response :=SendCommand(conn, "RSET\r\n")
+func rsetSession(conn net.Conn,smtpLogger *log.Logger) int {
+	response := SendCommand(conn, "RSET\r\n",smtpLogger)
 	statusCode,_ := parseResponse(response)
 	if statusCode != "250" {
 		return 1
@@ -109,19 +109,36 @@ func parseUrl(url string) string {
 // mailHost 163.com
 // connectHost mail.163.com
 func ScanHost(connectHost string,port int,mailHost string) {
+	//命中缓存
+	if config.RedisBloomMode == 1 && checkAndAddRedisBloom(config.RedisBloomConfig.UrlKeys,connectHost) == 1{
+		return
+
+	}
 	address := fmt.Sprintf("%s:%d", connectHost, port)
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		logger.Fatal("connect", address, "fail: ", err)
+		logger.Printf("connect %s fail : %s\n", address, err)
+		return
 	}
 	defer conn.Close()
-	logger.Printf("connect %s success: ", address)
+	logger.Printf("connect %s success: \n", address)
 	connIpv4 := conn.RemoteAddr().(*net.TCPAddr).IP.String()  // IP地址
+	// 命中缓存
+	if config.RedisBloomMode == 1 && checkAndAddRedisBloom(config.RedisBloomConfig.IpKeys,connIpv4) == 1{
+		return
+
+	}
+
+
 
 	// 获取服务器的身份响应
 	firstResponse := getResponse(conn)
 	smtpHost, smtpServer := parseFirstResponse(firstResponse)
 
+	// 创建专属logger
+	smtpLogger := getLogger(connectHost)
+
+	writeLog(smtpLogger, "<< "+firstResponse, config.ReceiveLogScreen)
 	// 可能有三个不同的域名
 	// 1. 服务器返回的smtpHost解析后仅保留Domain和TLD
 	// 2. mailHost 即dns解析前的key值
@@ -164,8 +181,11 @@ func ScanHost(connectHost string,port int,mailHost string) {
 			fmt.Sprintf("%s@%s", relayConfig.ToUser, relayConfig.ToDomain)})
 	}
 
+
+
 	// 开始测试
-	SendCommand(conn, "EHLO imapmax.xyz\r\n")
+
+	SendCommand(conn, "EHLO imapmax.xyz\r\n",smtpLogger)
 	var testInfo = []string {
 		strconv.FormatInt(time.Now().Unix(),10), // 时间戳
 		connectHost,   // 实际连接的host
@@ -189,7 +209,7 @@ func ScanHost(connectHost string,port int,mailHost string) {
 		} else {
 			// 此处调用单次测试，
 
-			testResult := SingleTest(conn,envelope.MailFrom,envelope.RcptTo)
+			testResult := SingleTest(conn,envelope.MailFrom,envelope.RcptTo,smtpLogger)
 			//testResult := SingleTestOptimize(conn,envelope.MailFrom,envelope.RcptTo)
 			if testResult == 0 {
 				// 测试成功
@@ -198,7 +218,7 @@ func ScanHost(connectHost string,port int,mailHost string) {
 			}
 			// testResultList = append(testResultList,strconv.Itoa(testResult))
 			// 发送rset请求，如果失败则跳过后续测试
-			skipTest = rsetSession(conn)
+			skipTest = rsetSession(conn,smtpLogger)
 		}
 	}
 	testInfo = append(testInfo,strconv.Itoa(successCnt))
@@ -212,5 +232,24 @@ func ScanHost(connectHost string,port int,mailHost string) {
 	if config.MysqlMode == 1 {
 		writeMysql(testInfo)
 	}
+}
 
+
+// 用于并发进行扫描
+// 从ch中循环读取要扫描的对象，并调用scanHost函数
+func concurrentScan(id int,ch chan scanTarget,stopCode chan int) {
+	hostCnt := 1
+	for {
+		select {
+			case target := <- ch:
+				ScanHost(target.Value,25,target.Name)
+				hostCnt += 1
+			default:
+				if readFinish == true {
+					logger.Printf("goroutine %d finish %d\n",id,hostCnt)
+					stopCode <- id
+					return
+				}
+		}
+	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"regexp"
 	"strings"
@@ -18,11 +19,12 @@ func getResponse(conn net.Conn) string {
 }
 
 // SendCommand 发送命令
-func SendCommand(conn net.Conn, command string) string {
-	writeLog(logger, ">> "+command, config.SendLogScreen)
+// smtpLogger 每一个扫描的host有一个单独的logger
+func SendCommand(conn net.Conn, command string,smtpLogger *log.Logger) string {
+	writeLog(smtpLogger, ">> "+command, config.SendLogScreen)
 	fmt.Fprintf(conn, command)
 	response := getResponse(conn)
-	writeLog(logger, "<< "+response, config.ReceiveLogScreen)
+	writeLog(smtpLogger, "<< "+response, config.ReceiveLogScreen)
 	return response
 }
 
@@ -32,6 +34,12 @@ func SendCommand(conn net.Conn, command string) string {
 // 匹配结果 (220 mail.imapmax.xyz smtp4dev ready) (220) (mail.imapmax.xyz) (.xyz) (smtp4dev ready)
 // 返回 mail.imapmax.xyz smtp4dev
 func parseFirstResponse(response string) (string,string){
+	// 部分服务器的格式是220-asp-relay.et.namecheap.tech ESMTP Postfix
+	if len(response)>3 && response[3] == '-' {
+		byteResponse := []byte(response)
+		byteResponse[3] = ' '
+		response = string(byteResponse)
+	}
 	regAll := regexp.MustCompile("^(\\d+) ([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+\\.?) (.*)")
 	matched := regAll.FindStringSubmatch(response)
 	var smtpHost, smtpServer string

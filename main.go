@@ -1,27 +1,37 @@
 package main
 
-import (
-	"bufio"
-	"fmt"
-	"io"
-	"os"
-)
-
 func main() {
-	logger = getLogger()
+	logger = getLogger("smtp")
 	config = readConfigJsonFile()
 	relayConfig = readRelayConfigJsonFile(config.RelayConfigFile)
-	f, err := os.Open(config.HostFile)
-	if err != nil {
-		fmt.Println(err.Error())
+	if config.MysqlMode == 1 {
+		mysqlDB = initMysqlConnect()
 	}
-	buf := bufio.NewReader(f)
-	for {
-		data, _, eof := buf.ReadLine()
-		if eof == io.EOF {
-			break
+	if config.RedisBloomMode == 1{
+		initRedisBloom()
+	}
+
+	// 创建channel数组，用于分配每个协程的任务
+	chs := make([]chan scanTarget,config.Concurrent)
+	for i:=0;i<config.Concurrent;i++ {
+		chs[i] = make(chan scanTarget,5)
+	}
+	stopCode := make(chan int,config.Concurrent)
+
+	if config.ReadMode == "txt" {
+		// txt模式暂时未完成
+		logger.Printf("read_mode:txt\nexit\n")
+	} else if config.ReadMode == "json" {
+		go readMXJson(chs,config.JsonFile,0)
+		for i:=0;i<config.Concurrent;i++ {
+			go concurrentScan(i,chs[i],stopCode) // 开始并发扫描
 		}
-		fmt.Printf("scaning %s:%d",string(data),25)
-		go ScanHost(string(data),25,"")  // Goroutine
+		for i:=0;i<config.Concurrent;i++ {
+			// 开始执行主进程退出
+			id := <- stopCode
+			logger.Printf("goroutine %d exit\n",id)
+		}
+	} else {
+		logger.Printf("read_mode error\n")
 	}
 }

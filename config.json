@@ -1,11 +1,15 @@
 {
-  "host_file":"host.txt",
+  "read_mode":"json",
+  "txt_file":"host.txt",
+  "json_file":"fdns_mx_600w_032.json",
   "relay_config_file":"relayTest.json",
+  "concurrent":1000,
+  "smtp_log":0,
   "send_log_screen": 0,
   "receive_log_screen":0,
   "csv_mode":1,
   "csv_file":"result.csv",
-  "mysql_mode":1,
+  "mysql_mode":0,
   "mysql_config":{
     "username":"root",
     "password":"123456",
@@ -16,6 +20,12 @@
     "column":"timestamp,mx_host,ip,port,smtp_host,smtp_server,case_num,success_cnt,skip_cnt,test_score"
   },
   "redis_bloom_mode":1,
-  "redis_bloom_host":"mx2.pony.imapmax.xyz:6379",
-  "redis_bloom_keys":"urls"
+  "redis_bloom_config":{
+    "host":"mx2.pony.imapmax.xyz:6379",
+    "url_keys":"urls",
+    "ip_keys":"ip",
+    "reverse": 0,
+    "error_rate": 0.001,
+    "capacity":8000000
+  }
 }
